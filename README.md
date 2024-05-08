@@ -1,2 +1,2 @@
-# lcd1602-ldd
+# 16x2 LCD linux device driver
 Linux device driver for L1602 LCD module
