@@ -1,5 +1,7 @@
 / {
     lcd1602 {
+        label = "lcd_datetime";
+
         compatible = "lcd1602";
         
         pinctrl-names = "default";

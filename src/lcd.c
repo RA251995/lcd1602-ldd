@@ -1,6 +1,7 @@
 #include "gpio.h"
 #include "lcd.h"
 #include <linux/device.h>
+#include <linux/of.h>
 #include <linux/delay.h>
 
 /* LCD commands */
@@ -33,7 +34,7 @@ typedef enum
 
 struct Lcd
 {
-	int id;
+	char label[16];
 	uint8_t cur_pos;
 	struct gpio_desc *gpio_descs[LCD_GPIO_COUNT];
 	struct device *parent_dev;
@@ -50,9 +51,21 @@ static void write_4_bits(struct gpio_desc *gpio_descs[], uint8_t data);
 
 Lcd *Lcd_ctor(struct device *parent_dev, int id)
 {
+	const char *name;
+	int ret;
+
 	Lcd *me = devm_kzalloc(parent_dev, sizeof(Lcd), GFP_KERNEL);
+	ret = of_property_read_string(parent_dev->of_node, "label", &name);
+	if (ret != 0)
+	{
+		dev_warn(parent_dev, "Missing label property\n");
+		scnprintf(me->label, sizeof(me->label) - 1, "l1602-%d", id);
+	}
+	else
+	{
+		scnprintf(me->label, sizeof(me->label) - 1, "%s", name);
+	}
 	me->parent_dev = parent_dev;
-	me->id = id;
 	mutex_init(&me->lock);
 	return me;
 }
@@ -83,9 +96,9 @@ void Lcd_deinit(Lcd *const me)
 	Lcd_clearDisplay(me);
 }
 
-int Lcd_getId(Lcd *const me)
+const char *Lcd_getLabel(Lcd *const me)
 {
-	return me->id;
+	return me->label;
 }
 
 void Lcd_clearDisplay(Lcd *const me)
@@ -316,24 +329,23 @@ static void print_char(struct gpio_desc *gpio_descs[], uint8_t *cur_pos, uint8_t
 static void init_lcd(struct gpio_desc *gpio_descs[], uint8_t *cur_pos)
 {
 
-
 	/* See 'Initializing by Instruction' section in HD44780U manual */
 	mdelay(40);
-	
+
 	/* RS = 0, for LCD command, R/nW = 0, for write */
 	gpio_write(gpio_descs[LCD_GPIO_RS], GPIO_LOW);
 	gpio_write(gpio_descs[LCD_GPIO_RW], GPIO_LOW);
-	
+
 	write_4_bits(gpio_descs, 0x03);
-	
+
 	mdelay(5);
-	
+
 	write_4_bits(gpio_descs, 0x03);
-	
+
 	udelay(100);
-	
+
 	write_4_bits(gpio_descs, 0x03);
-	
+
 	write_4_bits(gpio_descs, 0x02);
 
 	/* 4 bit data mode, 2 lines selection, font size 5x8 */

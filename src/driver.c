@@ -106,25 +106,13 @@ int lcd1602_probe(struct platform_device *platform_dev)
     int ret;
 
     Lcd *lcd = Lcd_ctor(parent_dev, lcd_drv_data.total_devices);
-
-    // ret = of_property_read_string(parent_dev->of_node, "label", &name);
-    // if (ret != 0)
-    // {
-    //     dev_warn(parent_dev, "Missing label property\n");
-    //     sprintf(child_dev_data->label, "l1602-%d", lcd_drv_data.total_devices);
-    // }
-    // else
-    // {
-    //     strcpy(child_dev_data->label, name);
-    // }
-
     ret = Lcd_init(lcd);
     if (ret != 0)
     {
         return ret;
     }
 
-    child_dev = device_create(lcd_drv_data.class, parent_dev, 0, lcd, "l1602-%d", lcd_drv_data.total_devices);
+    child_dev = device_create(lcd_drv_data.class, parent_dev, 0, lcd, "%s", Lcd_getLabel(lcd));
     if (IS_ERR(child_dev))
     {
         ret = PTR_ERR(child_dev);
@@ -143,7 +131,7 @@ int lcd1602_probe(struct platform_device *platform_dev)
 
     lcd_drv_data.total_devices += 1;
 
-    dev_info(parent_dev, "Probed lcd1602@%d\n", Lcd_getId(lcd));
+    dev_info(parent_dev, "Probed %s\n", Lcd_getLabel(lcd));
     return 0;
 }
 
@@ -158,7 +146,7 @@ int lcd1602_remove(struct platform_device *platform_dev)
 
     Lcd_deinit(lcd);
 
-    dev_info(parent_dev, "Removed lcd1602@%d\n", Lcd_getId(lcd));
+    dev_info(parent_dev, "Removed %s\n", Lcd_getLabel(lcd));
     return 0;
 }
 

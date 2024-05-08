@@ -6,7 +6,7 @@ typedef struct Lcd Lcd;
 Lcd *Lcd_ctor(struct device *parent_dev, int id);
 int Lcd_init(Lcd *const me);
 void Lcd_deinit(Lcd *const me);
-int Lcd_getId(Lcd *const me);
+const char * Lcd_getLabel(Lcd *const me);
 void Lcd_clearDisplay(Lcd *const me);
 void Lcd_returnDisplayHome(Lcd *const me);
 void Lcd_printf(Lcd *const me, const char *fmt, ...);
