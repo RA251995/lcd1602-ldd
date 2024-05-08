@@ -1,0 +1,34 @@
+/ {
+    lcd1602 {
+        compatible = "lcd1602";
+        
+        pinctrl-names = "default";
+        pinctrl-0 = <&bone_lcd_gpios>;
+
+        rs-gpios = <&gpio2 9 GPIO_ACTIVE_HIGH>;
+        rw-gpios = <&gpio2 6 GPIO_ACTIVE_HIGH>;
+        en-gpios = <&gpio2 7 GPIO_ACTIVE_HIGH>;
+        d4-gpios = <&gpio2 11 GPIO_ACTIVE_HIGH>;
+        d5-gpios = <&gpio2 10 GPIO_ACTIVE_HIGH>;
+        d6-gpios = <&gpio2 13 GPIO_ACTIVE_HIGH>;
+        d7-gpios = <&gpio2 12 GPIO_ACTIVE_HIGH>;
+    };
+};
+
+&tda19988 {
+    status = "disabled";
+};
+
+&am33xx_pinmux {
+    bone_lcd_gpios: bone_lcd_gpios {
+        pinctrl-single,pins = <
+            AM33XX_PADCONF(AM335X_PIN_LCD_DATA3, PIN_OUTPUT, MUX_MODE7) /* lcd_rs */
+            AM33XX_PADCONF(AM335X_PIN_LCD_DATA0, PIN_OUTPUT, MUX_MODE7) /* lcd_rw */
+            AM33XX_PADCONF(AM335X_PIN_LCD_DATA1, PIN_OUTPUT, MUX_MODE7)	/* lcd_en */
+            AM33XX_PADCONF(AM335X_PIN_LCD_DATA5, PIN_OUTPUT, MUX_MODE7)	/* lcd_d4 */
+            AM33XX_PADCONF(AM335X_PIN_LCD_DATA4, PIN_OUTPUT, MUX_MODE7)	/* lcd_d5 */
+            AM33XX_PADCONF(AM335X_PIN_LCD_DATA7, PIN_OUTPUT, MUX_MODE7)	/* lcd_d6 */
+            AM33XX_PADCONF(AM335X_PIN_LCD_DATA6, PIN_OUTPUT, MUX_MODE7)	/* lcd_d7 */
+        >;
+    };
+};
