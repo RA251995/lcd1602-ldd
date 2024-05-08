@@ -20,23 +20,24 @@
 
 typedef enum
 {
-    LCD_GPIO_RS = 0,
-    LCD_GPIO_RW,
-    LCD_GPIO_EN,
-    LCD_GPIO_D4,
-    LCD_GPIO_D5,
-    LCD_GPIO_D6,
-    LCD_GPIO_D7,
+	LCD_GPIO_RS = 0,
+	LCD_GPIO_RW,
+	LCD_GPIO_EN,
+	LCD_GPIO_D4,
+	LCD_GPIO_D5,
+	LCD_GPIO_D6,
+	LCD_GPIO_D7,
 
-    LCD_GPIO_COUNT
+	LCD_GPIO_COUNT
 } LCD_GPIOS;
 
 struct Lcd
 {
-    int id;
-    uint8_t cur_pos;
-    struct gpio_desc *gpio_descs[LCD_GPIO_COUNT];
-    struct device *parent_dev;
+	int id;
+	uint8_t cur_pos;
+	struct gpio_desc *gpio_descs[LCD_GPIO_COUNT];
+	struct device *parent_dev;
+	struct mutex lock;
 };
 
 static int get_gpios(struct device *dev, struct gpio_desc *lcd_gpio_descs[]);
@@ -47,11 +48,12 @@ static void send_command(struct gpio_desc *gpio_descs[], uint8_t command);
 static void print_char(struct gpio_desc *gpio_descs[], uint8_t *cur_pos, uint8_t data);
 static void write_4_bits(struct gpio_desc *gpio_descs[], uint8_t data);
 
-Lcd * Lcd_ctor(struct device *parent_dev, int id)
+Lcd *Lcd_ctor(struct device *parent_dev, int id)
 {
 	Lcd *me = devm_kzalloc(parent_dev, sizeof(Lcd), GFP_KERNEL);
 	me->parent_dev = parent_dev;
 	me->id = id;
+	mutex_init(&me->lock);
 	return me;
 }
 
@@ -89,6 +91,11 @@ int Lcd_getId(Lcd *const me)
 /* Clear the display */
 void Lcd_clearDisplay(Lcd *const me)
 {
+	if (mutex_lock_interruptible(&me->lock) != 0)
+	{
+		return;
+	}
+
 	send_command(me->gpio_descs, LCD_CMD_DIS_CLEAR);
 	me->cur_pos = 0;
 	/*
@@ -96,11 +103,17 @@ void Lcd_clearDisplay(Lcd *const me)
 	 * display clear command execution wait time is around 2ms
 	 */
 	mdelay(2);
+
+	mutex_unlock(&me->lock);
 }
 
 /* Cursor returns to home position */
 void Lcd_returnDisplayHome(Lcd *const me)
 {
+	if (mutex_lock_interruptible(&me->lock) != 0)
+	{
+		return;
+	}
 
 	send_command(me->gpio_descs, LCD_CMD_DIS_RETURN_HOME);
 	me->cur_pos = 0;
@@ -109,6 +122,8 @@ void Lcd_returnDisplayHome(Lcd *const me)
 	 * return home command execution wait time is around 2ms
 	 */
 	mdelay(2);
+
+	mutex_unlock(&me->lock);
 }
 
 void Lcd_printf(Lcd *const me, const char *fmt, ...)
@@ -120,6 +135,11 @@ void Lcd_printf(Lcd *const me, const char *fmt, ...)
 	va_start(args, fmt);
 	text_size = vscnprintf(text_buffer, LCD_MAX_CHAR_COUNT, fmt, args);
 
+	if (mutex_lock_interruptible(&me->lock) != 0)
+	{
+		return;
+	}
+
 	for (int idx = 0; idx < text_size; idx++)
 	{
 		print_char(me->gpio_descs, &me->cur_pos, text_buffer[idx]);
@@ -128,6 +148,8 @@ void Lcd_printf(Lcd *const me, const char *fmt, ...)
 			me->cur_pos = 0;
 		}
 	}
+
+	mutex_unlock(&me->lock);
 }
 
 int Lcd_setCursor(Lcd *const me, uint8_t new_cur_pos)
@@ -135,6 +157,11 @@ int Lcd_setCursor(Lcd *const me, uint8_t new_cur_pos)
 	if (new_cur_pos >= LCD_MAX_CHAR_COUNT)
 	{
 		return -EINVAL;
+	}
+
+	if (mutex_lock_interruptible(&me->lock) != 0)
+	{
+		return -EINTR;
 	}
 
 	while (me->cur_pos != new_cur_pos)
@@ -151,31 +178,61 @@ int Lcd_setCursor(Lcd *const me, uint8_t new_cur_pos)
 		}
 	}
 
+	mutex_unlock(&me->lock);
+
 	return 0;
 }
 
 void Lcd_shiftLeftDisplay(Lcd *const me)
 {
+	if (mutex_lock_interruptible(&me->lock) != 0)
+	{
+		return;
+	}
+
 	send_command(me->gpio_descs, LCD_CMD_DIS_SHIFT_LEFT);
 	udelay(100); /* execution time > 37 micro seconds */
+
+	mutex_unlock(&me->lock);
 }
 
 void Lcd_shiftRightDisplay(Lcd *const me)
 {
+	if (mutex_lock_interruptible(&me->lock) != 0)
+	{
+		return;
+	}
+
 	send_command(me->gpio_descs, LCD_CMD_DIS_SHIFT_RIGHT);
-	udelay(100); /* execution time > 37 micro seconds */
+	udelay(100); /* execution time > 37 us */
+
+	mutex_unlock(&me->lock);
 }
 
 void Lcd_turnOnDisplay(Lcd *const me)
 {
+	if (mutex_lock_interruptible(&me->lock) != 0)
+	{
+		return;
+	}
+
 	send_command(me->gpio_descs, LCD_CMD_DIS_ON_CUR_ON_BLINK_ON);
-	udelay(100); /* execution time > 37 micro seconds */
+	udelay(100); /* execution time > 37 us */
+
+	mutex_unlock(&me->lock);
 }
 
 void Lcd_turnOffDisplay(Lcd *const me)
 {
+	if (mutex_lock_interruptible(&me->lock) != 0)
+	{
+		return;
+	}
+
 	send_command(me->gpio_descs, LCD_CMD_DIS_OFF_CUR_OFF_BLINK_OFF);
-	udelay(100); /* execution time > 37 micro seconds */
+	udelay(100); /* execution time > 37 us */
+
+	mutex_unlock(&me->lock);
 }
 
 static int get_gpios(struct device *dev, struct gpio_desc *lcd_gpio_descs[])

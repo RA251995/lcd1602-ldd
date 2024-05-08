@@ -1,2 +1,2 @@
-# 16x2 LCD linux device driver
-Linux device driver for L1602 LCD module
+# 16x2 LCD Linux Device Driver
+Linux sysfs driver for L1602 LCD module
