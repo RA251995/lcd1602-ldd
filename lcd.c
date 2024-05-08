@@ -88,7 +88,6 @@ int Lcd_getId(Lcd *const me)
 	return me->id;
 }
 
-/* Clear the display */
 void Lcd_clearDisplay(Lcd *const me)
 {
 	if (mutex_lock_interruptible(&me->lock) != 0)
@@ -98,16 +97,11 @@ void Lcd_clearDisplay(Lcd *const me)
 
 	send_command(me->gpio_descs, LCD_CMD_DIS_CLEAR);
 	me->cur_pos = 0;
-	/*
-	 * check page number 24 of datasheet.
-	 * display clear command execution wait time is around 2ms
-	 */
-	mdelay(2);
+	mdelay(2); /* execution time > 1.52 ms */
 
 	mutex_unlock(&me->lock);
 }
 
-/* Cursor returns to home position */
 void Lcd_returnDisplayHome(Lcd *const me)
 {
 	if (mutex_lock_interruptible(&me->lock) != 0)
@@ -117,11 +111,7 @@ void Lcd_returnDisplayHome(Lcd *const me)
 
 	send_command(me->gpio_descs, LCD_CMD_DIS_RETURN_HOME);
 	me->cur_pos = 0;
-	/*
-	 * check page number 24 of datasheet.
-	 * return home command execution wait time is around 2ms
-	 */
-	mdelay(2);
+	mdelay(2); /* execution time > 1.52 ms */
 
 	mutex_unlock(&me->lock);
 }
@@ -276,9 +266,6 @@ static int init_gpios(struct gpio_desc *gpio_descs[])
 	return 0;
 }
 
-/*
- * @brief call this function to make LCD latch the data lines in to its internal registers.
- */
 static void enable_lcd(struct gpio_desc *gpio_descs[])
 {
 	gpio_write(gpio_descs[LCD_GPIO_EN], GPIO_LOW);
@@ -289,7 +276,6 @@ static void enable_lcd(struct gpio_desc *gpio_descs[])
 	udelay(100); /* execution time > 37 micro seconds */
 }
 
-/* writes 4 bits of data/command on to D4,D5,D6,D7 lines */
 static void write_4_bits(struct gpio_desc *gpio_descs[], uint8_t data)
 {
 	/* 4 bits parallel data write */
@@ -301,12 +287,9 @@ static void write_4_bits(struct gpio_desc *gpio_descs[], uint8_t data)
 	enable_lcd(gpio_descs);
 }
 
-/*
- * This function sends a command to the LCD
- */
 static void send_command(struct gpio_desc *gpio_descs[], uint8_t command)
 {
-	/* RS=0 for LCD command */
+	/* RS = 0 for LCD command */
 	gpio_write(gpio_descs[LCD_GPIO_RS], GPIO_LOW);
 
 	/* R/nW = 0, for write */
@@ -316,12 +299,6 @@ static void send_command(struct gpio_desc *gpio_descs[], uint8_t command)
 	write_4_bits(gpio_descs, command);		/* lower nibble */
 }
 
-/*
- * This function sends a character to the LCD
- * Here we used 4 bit parallel data transmission.
- * First higher nibble of the data will be sent on to the data lines D4,D5,D6,D7
- * Then lower niblle of the data will be set on to the data lines D4,D5,D6,D7
- */
 static void print_char(struct gpio_desc *gpio_descs[], uint8_t *cur_pos, uint8_t data)
 {
 	/* RS=1, for user data */
@@ -338,19 +315,25 @@ static void print_char(struct gpio_desc *gpio_descs[], uint8_t *cur_pos, uint8_t
 
 static void init_lcd(struct gpio_desc *gpio_descs[], uint8_t *cur_pos)
 {
-	/* RS = 0, for LCD command */
+
+
+	/* See 'Initializing by Instruction' section in HD44780U manual */
+	mdelay(40);
+	
+	/* RS = 0, for LCD command, R/nW = 0, for write */
 	gpio_write(gpio_descs[LCD_GPIO_RS], GPIO_LOW);
-
-	/* R/nW = 0, for write */
 	gpio_write(gpio_descs[LCD_GPIO_RW], GPIO_LOW);
-
+	
 	write_4_bits(gpio_descs, 0x03);
+	
 	mdelay(5);
-
+	
 	write_4_bits(gpio_descs, 0x03);
+	
 	udelay(100);
-
+	
 	write_4_bits(gpio_descs, 0x03);
+	
 	write_4_bits(gpio_descs, 0x02);
 
 	/* 4 bit data mode, 2 lines selection, font size 5x8 */
