@@ -1,5 +1,6 @@
 #include "gpio.h"
 #include "lcd.h"
+#include <linux/device.h>
 #include <linux/delay.h>
 
 /* LCD commands */
@@ -16,6 +17,183 @@
 #define LCD_CMD_CURSOR_SHIFT_LEFT (0x10)
 
 #define LCD_MAX_CHAR_COUNT (80U)
+
+typedef enum
+{
+    LCD_GPIO_RS = 0,
+    LCD_GPIO_RW,
+    LCD_GPIO_EN,
+    LCD_GPIO_D4,
+    LCD_GPIO_D5,
+    LCD_GPIO_D6,
+    LCD_GPIO_D7,
+
+    LCD_GPIO_COUNT
+} LCD_GPIOS;
+
+struct Lcd
+{
+    int id;
+    uint8_t cur_pos;
+    struct gpio_desc *gpio_descs[LCD_GPIO_COUNT];
+    struct device *parent_dev;
+};
+
+static int get_gpios(struct device *dev, struct gpio_desc *lcd_gpio_descs[]);
+static int init_gpios(struct gpio_desc *gpio_descs[]);
+static void init_lcd(struct gpio_desc *gpio_descs[], uint8_t *cur_pos);
+static void enable_lcd(struct gpio_desc *gpio_descs[]);
+static void send_command(struct gpio_desc *gpio_descs[], uint8_t command);
+static void print_char(struct gpio_desc *gpio_descs[], uint8_t *cur_pos, uint8_t data);
+static void write_4_bits(struct gpio_desc *gpio_descs[], uint8_t data);
+
+Lcd * Lcd_ctor(struct device *parent_dev, int id)
+{
+	Lcd *me = devm_kzalloc(parent_dev, sizeof(Lcd), GFP_KERNEL);
+	me->parent_dev = parent_dev;
+	me->id = id;
+	return me;
+}
+
+int Lcd_init(Lcd *me)
+{
+	int ret = 0;
+
+	ret = get_gpios(me->parent_dev, me->gpio_descs);
+	if (ret != 0)
+	{
+		return ret;
+	}
+
+	ret = init_gpios(me->gpio_descs);
+	if (ret != 0)
+	{
+		return ret;
+	}
+
+	init_lcd(me->gpio_descs, &me->cur_pos);
+
+	return ret;
+}
+
+void Lcd_deinit(Lcd *const me)
+{
+	Lcd_clearDisplay(me);
+}
+
+int Lcd_getId(Lcd *const me)
+{
+	return me->id;
+}
+
+/* Clear the display */
+void Lcd_clearDisplay(Lcd *const me)
+{
+	send_command(me->gpio_descs, LCD_CMD_DIS_CLEAR);
+	me->cur_pos = 0;
+	/*
+	 * check page number 24 of datasheet.
+	 * display clear command execution wait time is around 2ms
+	 */
+	mdelay(2);
+}
+
+/* Cursor returns to home position */
+void Lcd_returnDisplayHome(Lcd *const me)
+{
+
+	send_command(me->gpio_descs, LCD_CMD_DIS_RETURN_HOME);
+	me->cur_pos = 0;
+	/*
+	 * check page number 24 of datasheet.
+	 * return home command execution wait time is around 2ms
+	 */
+	mdelay(2);
+}
+
+void Lcd_printf(Lcd *const me, const char *fmt, ...)
+{
+	static char text_buffer[LCD_MAX_CHAR_COUNT + 1];
+	int text_size;
+	va_list args;
+
+	va_start(args, fmt);
+	text_size = vscnprintf(text_buffer, LCD_MAX_CHAR_COUNT, fmt, args);
+
+	for (int idx = 0; idx < text_size; idx++)
+	{
+		print_char(me->gpio_descs, &me->cur_pos, text_buffer[idx]);
+		if (idx >= LCD_MAX_CHAR_COUNT)
+		{
+			me->cur_pos = 0;
+		}
+	}
+}
+
+int Lcd_setCursor(Lcd *const me, uint8_t new_cur_pos)
+{
+	if (new_cur_pos >= LCD_MAX_CHAR_COUNT)
+	{
+		return -EINVAL;
+	}
+
+	while (me->cur_pos != new_cur_pos)
+	{
+		if (me->cur_pos < new_cur_pos)
+		{
+			send_command(me->gpio_descs, LCD_CMD_CURSOR_SHIFT_RIGHT);
+			me->cur_pos += 1;
+		}
+		else
+		{
+			send_command(me->gpio_descs, LCD_CMD_CURSOR_SHIFT_LEFT);
+			me->cur_pos -= 1;
+		}
+	}
+
+	return 0;
+}
+
+void Lcd_shiftLeftDisplay(Lcd *const me)
+{
+	send_command(me->gpio_descs, LCD_CMD_DIS_SHIFT_LEFT);
+	udelay(100); /* execution time > 37 micro seconds */
+}
+
+void Lcd_shiftRightDisplay(Lcd *const me)
+{
+	send_command(me->gpio_descs, LCD_CMD_DIS_SHIFT_RIGHT);
+	udelay(100); /* execution time > 37 micro seconds */
+}
+
+void Lcd_turnOnDisplay(Lcd *const me)
+{
+	send_command(me->gpio_descs, LCD_CMD_DIS_ON_CUR_ON_BLINK_ON);
+	udelay(100); /* execution time > 37 micro seconds */
+}
+
+void Lcd_turnOffDisplay(Lcd *const me)
+{
+	send_command(me->gpio_descs, LCD_CMD_DIS_OFF_CUR_OFF_BLINK_OFF);
+	udelay(100); /* execution time > 37 micro seconds */
+}
+
+static int get_gpios(struct device *dev, struct gpio_desc *lcd_gpio_descs[])
+{
+	const char *func_names[LCD_GPIO_COUNT] = {"rs", "rw", "en", "d4", "d5", "d6", "d7"};
+
+	for (int idx = 0; idx < LCD_GPIO_COUNT; idx++)
+	{
+		lcd_gpio_descs[idx] = devm_fwnode_gpiod_get(dev, dev->fwnode, func_names[idx], GPIOD_ASIS, func_names[idx]);
+		if (IS_ERR(lcd_gpio_descs[idx]))
+		{
+			dev_warn(dev, "Missing gpios-%s property\n", func_names[idx]);
+			return PTR_ERR(lcd_gpio_descs[idx]);
+		}
+	}
+
+	return 0;
+}
 
 static int init_gpios(struct gpio_desc *gpio_descs[])
 {
@@ -36,13 +214,15 @@ static int init_gpios(struct gpio_desc *gpio_descs[])
 		}
 	}
 
+	mdelay(40);
+
 	return 0;
 }
 
 /*
  * @brief call this function to make LCD latch the data lines in to its internal registers.
  */
-static void enable(struct gpio_desc *gpio_descs[])
+static void enable_lcd(struct gpio_desc *gpio_descs[])
 {
 	gpio_write(gpio_descs[LCD_GPIO_EN], GPIO_LOW);
 	udelay(1);
@@ -61,7 +241,7 @@ static void write_4_bits(struct gpio_desc *gpio_descs[], uint8_t data)
 	gpio_write(gpio_descs[LCD_GPIO_D6], (data >> 2) & 0x1);
 	gpio_write(gpio_descs[LCD_GPIO_D7], (data >> 3) & 0x1);
 
-	enable(gpio_descs);
+	enable_lcd(gpio_descs);
 }
 
 /*
@@ -99,18 +279,8 @@ static void print_char(struct gpio_desc *gpio_descs[], uint8_t *cur_pos, uint8_t
 	*cur_pos += 1;
 }
 
-int lcd_init(struct gpio_desc *gpio_descs[], uint8_t *cur_pos)
+static void init_lcd(struct gpio_desc *gpio_descs[], uint8_t *cur_pos)
 {
-	int ret;
-
-	ret = init_gpios(gpio_descs);
-	if (ret != 0)
-	{
-		return ret;
-	}
-
-	mdelay(40);
-
 	/* RS = 0, for LCD command */
 	gpio_write(gpio_descs[LCD_GPIO_RS], GPIO_LOW);
 
@@ -128,113 +298,17 @@ int lcd_init(struct gpio_desc *gpio_descs[], uint8_t *cur_pos)
 
 	/* 4 bit data mode, 2 lines selection, font size 5x8 */
 	send_command(gpio_descs, LCD_CMD_4DL_2N_5X8F);
+	udelay(100);
 
 	/* Display ON, Cursor ON */
 	send_command(gpio_descs, LCD_CMD_DON_CURON);
+	udelay(100);
 
-	lcd_display_clear(gpio_descs, cur_pos);
+	send_command(gpio_descs, LCD_CMD_DIS_CLEAR);
+	*cur_pos = 0;
+	mdelay(2);
 
 	/* Address auto increment */
 	send_command(gpio_descs, LCD_CMD_INCADD);
-
-	mdelay(1000);
-
-	return 0;
-}
-
-void lcd_deinit(struct gpio_desc *gpio_descs[], uint8_t *cur_pos)
-{
-	lcd_display_clear(gpio_descs, cur_pos);
-}
-
-void lcd_printf(struct gpio_desc *gpio_descs[], uint8_t *cur_pos, const char *fmt, ...)
-{
-	static char text_buffer[LCD_MAX_CHAR_COUNT + 1];
-	int text_size;
-	va_list args;
-
-	va_start(args, fmt);
-	text_size = vscnprintf(text_buffer, LCD_MAX_CHAR_COUNT, fmt, args);
-
-	for (int idx = 0; idx < text_size; idx++)
-	{
-		print_char(gpio_descs, cur_pos, text_buffer[idx]);
-		if (idx >= LCD_MAX_CHAR_COUNT)
-		{
-			*cur_pos = 0;
-		}
-	}
-}
-
-int lcd_set_cursor(struct gpio_desc *gpio_descs[], uint8_t *cur_pos, uint8_t new_cur_pos)
-{
-	if (new_cur_pos >= LCD_MAX_CHAR_COUNT)
-	{
-		return -EINVAL;
-	}
-
-	while (*cur_pos != new_cur_pos)
-	{
-		if (*cur_pos < new_cur_pos)
-		{
-			send_command(gpio_descs, LCD_CMD_CURSOR_SHIFT_RIGHT);
-			*cur_pos += 1;
-		}
-		else
-		{
-			send_command(gpio_descs, LCD_CMD_CURSOR_SHIFT_LEFT);
-			*cur_pos -= 1;
-		}
-	}
-
-	return 0;
-}
-
-/* Clear the display */
-void lcd_display_clear(struct gpio_desc *gpio_descs[], uint8_t *cur_pos)
-{
-	send_command(gpio_descs, LCD_CMD_DIS_CLEAR);
-	*cur_pos = 0;
-	/*
-	 * check page number 24 of datasheet.
-	 * display clear command execution wait time is around 2ms
-	 */
-	mdelay(2);
-}
-
-/* Cursor returns to home position */
-void lcd_display_return_home(struct gpio_desc *gpio_descs[], uint8_t *cur_pos)
-{
-
-	send_command(gpio_descs, LCD_CMD_DIS_RETURN_HOME);
-	*cur_pos = 0;
-	/*
-	 * check page number 24 of datasheet.
-	 * return home command execution wait time is around 2ms
-	 */
-	mdelay(2);
-}
-
-void lcd_display_shift_left(struct gpio_desc *gpio_descs[])
-{
-	send_command(gpio_descs, LCD_CMD_DIS_SHIFT_LEFT);
-	udelay(100); /* execution time > 37 micro seconds */
-}
-
-void lcd_display_shift_right(struct gpio_desc *gpio_descs[])
-{
-	send_command(gpio_descs, LCD_CMD_DIS_SHIFT_RIGHT);
-	udelay(100); /* execution time > 37 micro seconds */
-}
-
-void lcd_display_on(struct gpio_desc *gpio_descs[])
-{
-	send_command(gpio_descs, LCD_CMD_DIS_ON_CUR_ON_BLINK_ON);
-	udelay(100); /* execution time > 37 micro seconds */
-}
-
-void lcd_display_off(struct gpio_desc *gpio_descs[])
-{
-	send_command(gpio_descs, LCD_CMD_DIS_OFF_CUR_OFF_BLINK_OFF);
-	udelay(100); /* execution time > 37 micro seconds */
+	udelay(100);
 }

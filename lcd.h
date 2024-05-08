@@ -1,28 +1,19 @@
 #ifndef LCD_H_
 #define LCD_H_
 
-typedef enum
-{
-    LCD_GPIO_RS = 0,
-    LCD_GPIO_RW,
-    LCD_GPIO_EN,
-    LCD_GPIO_D4,
-    LCD_GPIO_D5,
-    LCD_GPIO_D6,
-    LCD_GPIO_D7,
+typedef struct Lcd Lcd;
 
-    LCD_GPIO_COUNT
-} LCD_GPIOS;
-
-int lcd_init(struct gpio_desc *gpio_descs[], uint8_t *cur_pos);
-void lcd_deinit(struct gpio_desc *gpio_descs[], uint8_t *cur_pos);
-void lcd_display_clear(struct gpio_desc *gpio_descs[], uint8_t *cur_pos);
-void lcd_display_return_home(struct gpio_desc *gpio_descs[], uint8_t *cur_pos);
-void lcd_display_shift_left(struct gpio_desc *gpio_descs[]);
-void lcd_display_shift_right(struct gpio_desc *gpio_descs[]);
-void lcd_display_on(struct gpio_desc *gpio_descs[]);
-void lcd_display_off(struct gpio_desc *gpio_descs[]);
-void lcd_printf(struct gpio_desc *gpio_descs[], uint8_t *cur_pos, const char *fmt, ...);
-int lcd_set_cursor(struct gpio_desc *gpio_descs[], uint8_t *cur_pos, uint8_t new_cur_pos);
+Lcd *Lcd_ctor(struct device *parent_dev, int id);
+int Lcd_init(Lcd *const me);
+void Lcd_deinit(Lcd *const me);
+int Lcd_getId(Lcd *const me);
+void Lcd_clearDisplay(Lcd *const me);
+void Lcd_returnDisplayHome(Lcd *const me);
+void Lcd_printf(Lcd *const me, const char *fmt, ...);
+int Lcd_setCursor(Lcd *const me, uint8_t new_cur_pos);
+void Lcd_shiftLeftDisplay(Lcd *const me);
+void Lcd_shiftRightDisplay(Lcd *const me);
+void Lcd_turnOnDisplay(Lcd *const me);
+void Lcd_turnOffDisplay(Lcd *const me);
 
 #endif /* LCD_H_ */
