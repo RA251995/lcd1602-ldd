@@ -1,6 +1,6 @@
 obj-m := lcd1602_driver.o
 
-lcd1602_driver-objs := driver.o lcd.o gpio.o
+lcd1602_driver-objs := src/driver.o src/lcd.o src/gpio.o
 
 ARCH=arm
 CROSS_COMPILE=arm-linux-gnueabihf-
