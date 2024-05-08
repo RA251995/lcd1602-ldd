@@ -20,3 +20,6 @@ scp:
 
 scp_dtb:
 	scp $(KERN_DIR)/arch/arm/boot/dts/am335x-boneblack.dtb debian@192.168.5.2:~/
+
+scp_sh:
+	scp *.sh debian@192.168.5.2:~/

@@ -49,6 +49,23 @@ ssize_t text_store(struct device *dev, struct device_attribute *attr, const char
     return count;
 }
 
+ssize_t cursor_store(struct device *dev, struct device_attribute *attr, const char *buf, size_t count)
+{
+    uint8_t new_cur_pos;
+    int ret;
+
+    struct lcd_dev_private_data *dev_data = dev_get_drvdata(dev);
+    ret = kstrtou8(buf, 0, &new_cur_pos);
+    if (ret != 0)
+    {
+        return ret;
+    }
+
+    ret = lcd_set_cursor(dev_data->lcd_gpio_descs, &dev_data->cur_pos, new_cur_pos);
+
+    return ret ? : count;
+}
+
 ssize_t cmd_store(struct device *dev, struct device_attribute *attr, const char *buf, size_t count)
 {
     struct lcd_dev_private_data *dev_data = dev_get_drvdata(dev);
@@ -91,10 +108,12 @@ ssize_t cmd_show(struct device *dev, struct device_attribute *attr, char *buf)
 }
 
 static DEVICE_ATTR_WO(text);
+static DEVICE_ATTR_WO(cursor);
 static DEVICE_ATTR_RW(cmd);
 
 static struct attribute *lcd_attrs[] = {
     &dev_attr_text.attr,
+    &dev_attr_cursor.attr,
     &dev_attr_cmd.attr,
     NULL,
 };

@@ -23,5 +23,6 @@ void lcd_display_shift_right(struct gpio_desc *gpio_descs[]);
 void lcd_display_on(struct gpio_desc *gpio_descs[]);
 void lcd_display_off(struct gpio_desc *gpio_descs[]);
 void lcd_printf(struct gpio_desc *gpio_descs[], uint8_t *cur_pos, const char *fmt, ...);
+int lcd_set_cursor(struct gpio_desc *gpio_descs[], uint8_t *cur_pos, uint8_t new_cur_pos);
 
 #endif /* LCD_H_ */

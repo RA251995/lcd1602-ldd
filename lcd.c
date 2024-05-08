@@ -12,6 +12,8 @@
 #define LCD_CMD_DIS_SHIFT_RIGHT (0x1C)
 #define LCD_CMD_DIS_ON_CUR_ON_BLINK_ON (0x0F)
 #define LCD_CMD_DIS_OFF_CUR_OFF_BLINK_OFF (0x08)
+#define LCD_CMD_CURSOR_SHIFT_RIGHT (0x14)
+#define LCD_CMD_CURSOR_SHIFT_LEFT (0x10)
 
 #define LCD_MAX_CHAR_COUNT (80U)
 
@@ -162,6 +164,30 @@ void lcd_printf(struct gpio_desc *gpio_descs[], uint8_t *cur_pos, const char *fm
 			*cur_pos = 0;
 		}
 	}
+}
+
+int lcd_set_cursor(struct gpio_desc *gpio_descs[], uint8_t *cur_pos, uint8_t new_cur_pos)
+{
+	if (new_cur_pos >= LCD_MAX_CHAR_COUNT)
+	{
+		return -EINVAL;
+	}
+
+	while (*cur_pos != new_cur_pos)
+	{
+		if (*cur_pos < new_cur_pos)
+		{
+			send_command(gpio_descs, LCD_CMD_CURSOR_SHIFT_RIGHT);
+			*cur_pos += 1;
+		}
+		else
+		{
+			send_command(gpio_descs, LCD_CMD_CURSOR_SHIFT_LEFT);
+			*cur_pos -= 1;
+		}
+	}
+
+	return 0;
 }
 
 /* Clear the display */
